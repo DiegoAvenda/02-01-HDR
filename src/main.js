@@ -1,6 +1,8 @@
 import * as THREE from "three"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
 import { Pane } from "tweakpane"
+import { RGBELoader } from "three/addons/loaders/RGBELoader.js"
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js"
 
 class App {
   #threejs_ = null
@@ -59,8 +61,25 @@ class App {
     const light = new THREE.DirectionalLight(0xffffff, 3.14159)
     light.position.set(5, 20, 5)
     light.target.position.set(0, 0, 0)
-    this.#scene_.add(light)
+    //this.#scene_.add(light)
     this.#scene_.add(light.target)
+
+    //create a ring of lights
+    for (let i = 0; i < 10; ++i) {
+      const angle = Math.PI * 2 * (i / 10)
+      const lightColour = new THREE.Color().setHSL(i / 10, 1, 0.5)
+      const light = new THREE.PointLight(lightColour, 20)
+      const radius = 1
+      light.position.set(
+        radius * Math.cos(angle),
+        0.5,
+        radius * Math.sin(angle)
+      )
+      this.#scene_.add(light)
+
+      const lightHelper = new THREE.PointLightHelper(light, 0.1)
+      this.#scene_.add(lightHelper)
+    }
 
     //load mid-grey texture
     const loader = new THREE.TextureLoader()
@@ -76,7 +95,14 @@ class App {
       metalness: 0.0,
     })
     const cubeMesh = new THREE.Mesh(geo, cubeMat)
-    this.#scene_.add(cubeMesh)
+    //this.#scene_.add(cubeMesh)
+
+    const gltfLoader = new GLTFLoader()
+    gltfLoader.setPath("./resources/models/")
+    gltfLoader.load("skritek_-_wooden_statue.glb", (gltf) => {
+      gltf.scene.scale.setScalar(0.1)
+      this.#scene_.add(gltf.scene)
+    })
 
     //debug UI
     const pane = new Pane()
@@ -96,6 +122,19 @@ class App {
           "SRGB": THREE.SRGBColorSpace,
         },
       },
+      toneMapping: {
+        type: THREE.NoToneMapping,
+        options: {
+          None: THREE.NoToneMapping,
+          Linear: THREE.LinearToneMapping,
+          Reinhard: THREE.ReinhardToneMapping,
+          ACESFilmic: THREE.ACESFilmicToneMapping,
+          Cineon: THREE.CineonToneMapping,
+          AgX: THREE.AgXToneMapping,
+          Neutral: THREE.NeutralToneMapping,
+        },
+        exposure: 1,
+      },
     }
 
     const hdrFolder = pane.addFolder({ title: "HDR" })
@@ -105,6 +144,23 @@ class App {
       })
       .on("change", (evt) => {
         this.#threejs_.outputColorSpace = evt.value
+      })
+
+    hdrFolder
+      .addBinding(this.#debugParams_.toneMapping, "type", {
+        options: this.#debugParams_.toneMapping.options,
+      })
+      .on("change", (evt) => {
+        this.#threejs_.toneMapping = evt.value
+      })
+
+    hdrFolder
+      .addBinding(this.#debugParams_.toneMapping, "exposure", {
+        min: 0.25,
+        max: 2,
+      })
+      .on("change", (evt) => {
+        this.#threejs_.toneMappingExposure = evt.value
       })
 
     const greyFolder = pane.addFolder({ title: "Mid Gray" })
@@ -117,7 +173,18 @@ class App {
         midGreyTextrue.needsUpdate = true
       })
 
-    this.#LoadCubeMap_("./resources/skybox/cubemaps/rosendal_park_sunset/")
+    //this.#LoadCubeMap_("./resources/skybox/cubemaps/rosendal_park_sunset/")
+    //this.#LoadRGB_("./resources/skybox/rosendal_park_sunset_1k.hdr")
+  }
+
+  #LoadRGB_(path) {
+    const loader = new RGBELoader()
+    loader.load(path, (hdrTexture) => {
+      hdrTexture.mapping = THREE.EquirectangularReflectionMapping
+
+      this.#scene_.background = hdrTexture
+      this.#scene_.environment = hdrTexture
+    })
   }
 
   #LoadCubeMap_(path) {
